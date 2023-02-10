@@ -201,12 +201,11 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
             ratio = shapes[0][1][0][0]
 
             t = time_synchronized()
-            det_out, da_seg_out, ll_seg_out = model(img)
+            _, da_seg_out, ll_seg_out = model(img)
             t_inf = time_synchronized() - t
             if batch_i > 0:
                 T_inf.update(t_inf/img.size(0),img.size(0))
 
-            inf_out,train_out = det_out
 
             #driving area segment evaluation
             _,da_predict=torch.max(da_seg_out, 1)
@@ -240,15 +239,14 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
             ll_IoU_seg.update(ll_IoU,img.size(0))
             ll_mIoU_seg.update(ll_mIoU,img.size(0))
             
-            total_loss, head_losses = criterion((train_out,da_seg_out, ll_seg_out), target, shapes,model)   #Compute loss
+            total_loss, head_losses = criterion((da_seg_out, ll_seg_out), target, shapes,model)   #Compute loss
             losses.update(total_loss.item(), img.size(0))
 
             #NMS
             t = time_synchronized()
             target[0][:, 2:] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
             lb = [target[0][target[0][:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
-            output = non_max_suppression(inf_out, conf_thres= config.TEST.NMS_CONF_THRESHOLD, iou_thres=config.TEST.NMS_IOU_THRESHOLD, labels=lb)
-            #output = non_max_suppression(inf_out, conf_thres=0.001, iou_thres=0.6)
+           #output = non_max_suppression(inf_out, conf_thres=0.001, iou_thres=0.6)
             #output = non_max_suppression(inf_out, conf_thres=config.TEST.NMS_CONF_THRES, iou_thres=config.TEST.NMS_IOU_THRES)
             t_nms = time_synchronized() - t
             if batch_i > 0:
@@ -291,116 +289,10 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
                         _ = show_seg_result(img_ll, ll_seg_mask, i,epoch,save_dir, is_ll=True)
                         _ = show_seg_result(img_ll1, ll_gt_mask, i, epoch, save_dir, is_ll=True, is_gt=True)
 
-                        img_det = cv2.imread(paths[i])
-                        img_gt = img_det.copy()
-                        det = output[i].clone()
-                        if len(det):
-                            det[:,:4] = scale_coords(img[i].shape[1:],det[:,:4],img_det.shape).round()
-                        for *xyxy,conf,cls in reversed(det):
-                            #print(cls)
-                            label_det_pred = f'{names[int(cls)]} {conf:.2f}'
-                            plot_one_box(xyxy, img_det , label=label_det_pred, color=colors[int(cls)], line_thickness=3)
-                        cv2.imwrite(save_dir+"/batch_{}_{}_det_pred.png".format(epoch,i),img_det)
-
-                        labels = target[0][target[0][:, 0] == i, 1:]
-                        # print(labels)
-                        labels[:,1:5]=xywh2xyxy(labels[:,1:5])
-                        if len(labels):
-                            labels[:,1:5]=scale_coords(img[i].shape[1:],labels[:,1:5],img_gt.shape).round()
-                        for cls,x1,y1,x2,y2 in labels:
-                            #print(names)
-                            #print(cls)
-                            label_det_gt = f'{names[int(cls)]}'
-                            xyxy = (x1,y1,x2,y2)
-                            plot_one_box(xyxy, img_gt , label=label_det_gt, color=colors[int(cls)], line_thickness=3)
-                        cv2.imwrite(save_dir+"/batch_{}_{}_det_gt.png".format(epoch,i),img_gt)
 
         # Statistics per image
         # output([xyxy,conf,cls])
         # target[0] ([img_id,cls,xyxy])
-        for si, pred in enumerate(output):
-            labels = target[0][target[0][:, 0] == si, 1:]     #all object in one image 
-            nl = len(labels)    # num of object
-            tcls = labels[:, 0].tolist() if nl else []  # target class
-            path = Path(paths[si])
-            seen += 1
-
-            if len(pred) == 0:
-                if nl:
-                    stats.append((torch.zeros(0, niou, dtype=torch.bool), torch.Tensor(), torch.Tensor(), tcls))
-                continue
-
-            # Predictions
-            predn = pred.clone()
-            scale_coords(img[si].shape[1:], predn[:, :4], shapes[si][0], shapes[si][1])  # native-space pred
-
-            # Append to text file
-            if config.TEST.SAVE_TXT:
-                gn = torch.tensor(shapes[si][0])[[1, 0, 1, 0]]  # normalization gain whwh
-                for *xyxy, conf, cls in predn.tolist():
-                    xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                    line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
-                    with open(save_dir + '/labels/' + path.stem + '.txt', 'a') as f:
-                        f.write(('%g ' * len(line)).rstrip() % line + '\n')
-
-            # W&B logging
-            if config.TEST.PLOTS and len(wandb_images) < log_imgs:
-                box_data = [{"position": {"minX": xyxy[0], "minY": xyxy[1], "maxX": xyxy[2], "maxY": xyxy[3]},
-                             "class_id": int(cls),
-                             "box_caption": "%s %.3f" % (names[cls], conf),
-                             "scores": {"class_score": conf},
-                             "domain": "pixel"} for *xyxy, conf, cls in pred.tolist()]
-                boxes = {"predictions": {"box_data": box_data, "class_labels": names}}  # inference-space
-                wandb_images.append(wandb.Image(img[si], boxes=boxes, caption=path.name))
-
-            # Append to pycocotools JSON dictionary
-            if config.TEST.SAVE_JSON:
-                # [{"image_id": 42, "category_id": 18, "bbox": [258.15, 41.29, 348.26, 243.78], "score": 0.236}, ...
-                image_id = int(path.stem) if path.stem.isnumeric() else path.stem
-                box = xyxy2xywh(predn[:, :4])  # xywh
-                box[:, :2] -= box[:, 2:] / 2  # xy center to top-left corner
-                for p, b in zip(pred.tolist(), box.tolist()):
-                    jdict.append({'image_id': image_id,
-                                  'category_id': coco91class[int(p[5])] if is_coco else int(p[5]),
-                                  'bbox': [round(x, 3) for x in b],
-                                  'score': round(p[4], 5)})
-
-
-            # Assign all predictions as incorrect
-            correct = torch.zeros(pred.shape[0], niou, dtype=torch.bool, device=device)
-            if nl:
-                detected = []  # target indices
-                tcls_tensor = labels[:, 0]
-
-                # target boxes
-                tbox = xywh2xyxy(labels[:, 1:5])
-                scale_coords(img[si].shape[1:], tbox, shapes[si][0], shapes[si][1])  # native-space labels
-                if config.TEST.PLOTS:
-                    confusion_matrix.process_batch(pred, torch.cat((labels[:, 0:1], tbox), 1))
-
-                # Per target class
-                for cls in torch.unique(tcls_tensor):                    
-                    ti = (cls == tcls_tensor).nonzero(as_tuple=False).view(-1)  # prediction indices
-                    pi = (cls == pred[:, 5]).nonzero(as_tuple=False).view(-1)  # target indices
-
-                    # Search for detections
-                    if pi.shape[0]:
-                        # Prediction to target ious
-                        # n*m  n:pred  m:label
-                        ious, i = box_iou(predn[pi, :4], tbox[ti]).max(1)  # best ious, indices
-                        # Append detections
-                        detected_set = set()
-                        for j in (ious > iouv[0]).nonzero(as_tuple=False):
-                            d = ti[i[j]]  # detected target
-                            if d.item() not in detected_set:
-                                detected_set.add(d.item())
-                                detected.append(d)
-                                correct[pi[j]] = ious[j] > iouv  # iou_thres is 1xn
-                                if len(detected) == nl:  # all targets already located in image
-                                    break
-
-            # Append statistics (correct, conf, pcls, tcls)
-            stats.append((correct.cpu(), pred[:, 4].cpu(), pred[:, 5].cpu(), tcls))
 
         if config.TEST.PLOTS and batch_i < 3:
             f = save_dir +'/'+ f'test_batch{batch_i}_labels.jpg'  # labels

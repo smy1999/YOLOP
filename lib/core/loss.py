@@ -67,7 +67,6 @@ class MultiHeadLoss(nn.Module):
         cfg = self.cfg
         device = targets[0].device
         lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
-        tcls, tbox, indices, anchors = build_targets(cfg, predictions[0], targets[0], model)  # targets
 
         # Class label smoothing https://arxiv.org/pdf/1902.04103.pdf eqn 3
         cp, cn = smooth_BCE(eps=0.0)
@@ -79,39 +78,11 @@ class MultiHeadLoss(nn.Module):
         no = len(predictions[0])  # number of outputs
         balance = [4.0, 1.0, 0.4] if no == 3 else [4.0, 1.0, 0.4, 0.1]  # P3-5 or P3-6
 
-        # calculate detection loss
-        for i, pi in enumerate(predictions[0]):  # layer index, layer predictions
-            b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
-            tobj = torch.zeros_like(pi[..., 0], device=device)  # target obj
-
-            n = b.shape[0]  # number of targets
-            if n:
-                nt += n  # cumulative targets
-                ps = pi[b, a, gj, gi]  # prediction subset corresponding to targets
-
-                # Regression
-                pxy = ps[:, :2].sigmoid() * 2. - 0.5
-                pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[i]
-                pbox = torch.cat((pxy, pwh), 1).to(device)  # predicted box
-                iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
-                lbox += (1.0 - iou).mean()  # iou loss
-
-                # Objectness
-                tobj[b, a, gj, gi] = (1.0 - model.gr) + model.gr * iou.detach().clamp(0).type(tobj.dtype)  # iou ratio
-
-                # Classification
-                # print(model.nc)
-                if model.nc > 1:  # cls loss (only if multiple classes)
-                    t = torch.full_like(ps[:, 5:], cn, device=device)  # targets
-                    t[range(n), tcls[i]] = cp
-                    lcls += BCEcls(ps[:, 5:], t)  # BCE
-            lobj += BCEobj(pi[..., 4], tobj) * balance[i]  # obj loss
-
-        drive_area_seg_predicts = predictions[1].view(-1)
+        drive_area_seg_predicts = predictions[0].view(-1)
         drive_area_seg_targets = targets[1].view(-1)
         lseg_da = BCEseg(drive_area_seg_predicts, drive_area_seg_targets)
 
-        lane_line_seg_predicts = predictions[2].view(-1)
+        lane_line_seg_predicts = predictions[1].view(-1)
         lane_line_seg_targets = targets[2].view(-1)
         lseg_ll = BCEseg(lane_line_seg_predicts, lane_line_seg_targets)
 
@@ -120,7 +91,7 @@ class MultiHeadLoss(nn.Module):
         pad_w, pad_h = shapes[0][1][1]
         pad_w = int(pad_w)
         pad_h = int(pad_h)
-        _,lane_line_pred=torch.max(predictions[2], 1)
+        _,lane_line_pred=torch.max(predictions[1], 1)
         _,lane_line_gt=torch.max(targets[2], 1)
         lane_line_pred = lane_line_pred[:, pad_h:height-pad_h, pad_w:width-pad_w]
         lane_line_gt = lane_line_gt[:, pad_h:height-pad_h, pad_w:width-pad_w]
