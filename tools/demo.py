@@ -59,7 +59,7 @@ def detect(cfg,opt):
 
     # Set Dataloader
     if opt.source.isnumeric():
-        cudnn.benchmark = True  # set True to speed up constant image size inference
+        cudnn.benchmark = False  # set True to speed up constant image size inference
         dataset = LoadStreams(opt.source, img_size=opt.img_size)
         bs = len(dataset)  # batch_size
     else:
@@ -165,7 +165,7 @@ def detect(cfg,opt):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default='weights/End-to-end.pth', help='model.pth path(s)')
+    parser.add_argument('--weights', type=str, default='weights/End-to-end.pth', help='model.pth path(s)')
     parser.add_argument('--source', type=str, default='inference/videos', help='source')  # file/folder   ex:inference/images
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
