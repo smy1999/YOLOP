@@ -59,7 +59,7 @@ def detect(cfg,opt):
 
     # Set Dataloader
     if opt.source.isnumeric():
-        cudnn.benchmark = False  # set True to speed up constant image size inference
+        cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadStreams(opt.source, img_size=opt.img_size)
         bs = len(dataset)  # batch_size
     else:

@@ -17,7 +17,7 @@ _C.num_seg_class = 2
 _C.CUDNN = CN()
 _C.CUDNN.BENCHMARK = True
 _C.CUDNN.DETERMINISTIC = False
-_C.CUDNN.ENABLED = False
+_C.CUDNN.ENABLED = True
 
 # common params for NETWORK
 _C.MODEL = CN(new_allowed=True)
@@ -114,7 +114,7 @@ _C.TRAIN.PLOT = True                #
 
 # testing
 _C.TEST = CN(new_allowed=True)
-_C.TEST.BATCH_SIZE_PER_GPU = 2
+_C.TEST.BATCH_SIZE_PER_GPU = 4
 _C.TEST.MODEL_FILE = ''
 _C.TEST.SAVE_JSON = True
 _C.TEST.SAVE_TXT = False
