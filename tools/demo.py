@@ -94,16 +94,16 @@ def detect(cfg,opt):
         t2 = time_synchronized()
         # if i == 0:
         #     print(det_out)
-        inf_out, _ = det_out
+        # inf_out, _ = det_out
         inf_time.update(t2-t1,img.size(0))
 
         # Apply NMS
         t3 = time_synchronized()
-        det_pred = non_max_suppression(inf_out, conf_thres=opt.conf_thres, iou_thres=opt.iou_thres, classes=None, agnostic=False)
+        # det_pred = non_max_suppression(inf_out, conf_thres=opt.conf_thres, iou_thres=opt.iou_thres, classes=None, agnostic=False)
         t4 = time_synchronized()
 
         nms_time.update(t4-t3,img.size(0))
-        det=det_pred[0]
+        # det=det_pred[0]
 
         save_path = str(opt.save_dir +'/'+ Path(path).name) if dataset.mode != 'stream' else str(opt.save_dir + '/' + "web.mp4")
 
@@ -131,11 +131,11 @@ def detect(cfg,opt):
 
         img_det = show_seg_result(img_det, (da_seg_mask, ll_seg_mask), _, _, is_demo=True)
 
-        if len(det):
-            det[:,:4] = scale_coords(img.shape[2:],det[:,:4],img_det.shape).round()
-            for *xyxy,conf,cls in reversed(det):
-                label_det_pred = f'{names[int(cls)]} {conf:.2f}'
-                plot_one_box(xyxy, img_det , label=label_det_pred, color=colors[int(cls)], line_thickness=2)
+        # if len(det):
+        #     det[:,:4] = scale_coords(img.shape[2:],det[:,:4],img_det.shape).round()
+        #     for *xyxy,conf,cls in reversed(det):
+        #         label_det_pred = f'{names[int(cls)]} {conf:.2f}'
+        #         plot_one_box(xyxy, img_det , label=label_det_pred, color=colors[int(cls)], line_thickness=2)
         
         if dataset.mode == 'images':
             cv2.imwrite(save_path,img_det)
