@@ -15,33 +15,30 @@ def main(path):
 
     checkpoint_file = path
     checkpoint = torch.load(checkpoint_file, map_location=torch.device('cpu'))
+    # for k in checkpoint['state_dict'].keys():
+    #     print(k)
 
     checkpoint_dict = {}
     for k, v in checkpoint['state_dict'].items():
         index = int(k.split('.')[1])
-        if index >= 25:
-            k = k[0: 6] + str(int(k[6: 8]) - 8) + k[8:]
-        if 14 < index < 25:
+        if index > 25:
+            k = k[0: 6] + str(int(k[6: 8]) - 9) + k[8:]
+        if 14 < index <= 25:
             continue
         checkpoint_dict[k] = v
-
     # for k in checkpoint_dict.keys():
     #     print(k)
-#     print(checkpoint_dict)
 
-    # print(len(checkpoint_dict.keys()))
-    # print(len(model_dict.keys()))
+    print(len(model_dict.keys()))
+    print(len(checkpoint['state_dict'].keys()))
+    print(len(checkpoint_dict.keys()))
+
     model_dict.update(checkpoint_dict)
-    # print(len(model_dict.keys()))
 
-    # print(model_dict['model.9.m.0.cv2.bn.bias'])
-    # print(checkpoint_dict['model.9.m.0.cv2.bn.bias'])
-    # print(model.state_dict()['model.9.m.0.cv2.bn.bias'])
-    # print(model)
-
+    print(len(model_dict.keys()))
+    #
     checkpoint['state_dict'] = checkpoint_dict
-    # print(checkpoint['state_dict']['model.9.m.0.cv2.bn.bias'])
-    torch.save(checkpoint, 'new_ckpt.pth')
+    torch.save(checkpoint, 'onlyll.pth')
 
 
 def test():
@@ -50,6 +47,6 @@ def test():
 
 
 if __name__ == '__main__':
-    PATH = './weights/End-to-end.pth'
+    PATH = './new_ckpt.pth'
     main(PATH)
     # test()
