@@ -134,11 +134,6 @@ def main():
     best_model = False
     last_epoch = -1
 
-    Encoder_para_idx = [str(i) for i in range(0, 17)]
-    Det_Head_para_idx = [str(i) for i in range(17, 25)]
-    Da_Seg_Head_para_idx = [str(i) for i in range(25, 34)]
-    Ll_Seg_Head_para_idx = [str(i) for i in range(34,43)]
-
     lf = lambda x: ((1 + math.cos(x * math.pi / cfg.TRAIN.END_EPOCH)) / 2) * \
                    (1 - cfg.TRAIN.LRF) + cfg.TRAIN.LRF  # cosine
     lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
@@ -186,58 +181,6 @@ def main():
                 checkpoint_file, checkpoint['epoch']))
             #cfg.NEED_AUTOANCHOR = False     #disable autoanchor
         # model = model.to(device)
-
-        if cfg.TRAIN.SEG_ONLY:  #Only train two segmentation branchs
-            logger.info('freeze encoder and Det head...')
-            for k, v in model.named_parameters():
-                v.requires_grad = True  # train all layers
-                if k.split(".")[1] in Encoder_para_idx + Det_Head_para_idx:
-                    print('freezing %s' % k)
-                    v.requires_grad = False
-
-        if cfg.TRAIN.DET_ONLY:  #Only train detection branch
-            logger.info('freeze encoder and two Seg heads...')
-            # print(model.named_parameters)
-            for k, v in model.named_parameters():
-                v.requires_grad = True  # train all layers
-                if k.split(".")[1] in Encoder_para_idx + Da_Seg_Head_para_idx + Ll_Seg_Head_para_idx:
-                    print('freezing %s' % k)
-                    v.requires_grad = False
-
-        if cfg.TRAIN.ENC_SEG_ONLY:  # Only train encoder and two segmentation branchs
-            logger.info('freeze Det head...')
-            for k, v in model.named_parameters():
-                v.requires_grad = True  # train all layers 
-                if k.split(".")[1] in Det_Head_para_idx:
-                    print('freezing %s' % k)
-                    v.requires_grad = False
-
-        if cfg.TRAIN.ENC_DET_ONLY or cfg.TRAIN.DET_ONLY:    # Only train encoder and detection branchs
-            logger.info('freeze two Seg heads...')
-            for k, v in model.named_parameters():
-                v.requires_grad = True  # train all layers
-                if k.split(".")[1] in Da_Seg_Head_para_idx + Ll_Seg_Head_para_idx:
-                    print('freezing %s' % k)
-                    v.requires_grad = False
-
-
-        if cfg.TRAIN.LANE_ONLY: 
-            logger.info('freeze encoder and Det head and Da_Seg heads...')
-            # print(model.named_parameters)
-            for k, v in model.named_parameters():
-                v.requires_grad = True  # train all layers
-                if k.split(".")[1] in Encoder_para_idx + Da_Seg_Head_para_idx + Det_Head_para_idx:
-                    print('freezing %s' % k)
-                    v.requires_grad = False
-
-        if cfg.TRAIN.DRIVABLE_ONLY:
-            logger.info('freeze encoder and Det head and Ll_Seg heads...')
-            # print(model.named_parameters)
-            for k, v in model.named_parameters():
-                v.requires_grad = True  # train all layers
-                if k.split(".")[1] in Encoder_para_idx + Ll_Seg_Head_para_idx + Det_Head_para_idx:
-                    print('freezing %s' % k)
-                    v.requires_grad = False
         
     if rank == -1 and torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model, device_ids=cfg.GPUS)
@@ -300,16 +243,6 @@ def main():
             collate_fn=dataset.AutoDriveDataset.collate_fn
         )
         print('load data finished')
-    
-    if rank in [-1, 0]:
-        if cfg.NEED_AUTOANCHOR:
-            logger.info("begin check anchors")
-            run_anchor(logger,train_dataset, model=model, thr=cfg.TRAIN.ANCHOR_THRESHOLD, imgsz=min(cfg.MODEL.IMAGE_SIZE))
-        else:
-            logger.info("anchors loaded successfully")
-            det = model.module.model[model.module.detector_index] if is_parallel(model) \
-                else model.model[model.detector_index]
-            logger.info(str(det.anchors))
 
     # training
     num_warmup = max(round(cfg.TRAIN.WARMUP_EPOCHS * num_batch), 1000)
