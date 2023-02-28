@@ -134,11 +134,6 @@ def main():
     best_model = False
     last_epoch = -1
 
-    Encoder_para_idx = [str(i) for i in range(0, 17)]
-    Det_Head_para_idx = [str(i) for i in range(17, 25)]
-    Da_Seg_Head_para_idx = [str(i) for i in range(25, 34)]
-    Ll_Seg_Head_para_idx = [str(i) for i in range(34,43)]
-
     lf = lambda x: ((1 + math.cos(x * math.pi / cfg.TRAIN.END_EPOCH)) / 2) * \
                    (1 - cfg.TRAIN.LRF) + cfg.TRAIN.LRF  # cosine
     lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
@@ -186,58 +181,6 @@ def main():
                 checkpoint_file, checkpoint['epoch']))
             #cfg.NEED_AUTOANCHOR = False     #disable autoanchor
         # model = model.to(device)
-
-        if cfg.TRAIN.SEG_ONLY:  #Only train two segmentation branchs
-            logger.info('freeze encoder and Det head...')
-            for k, v in model.named_parameters():
-                v.requires_grad = True  # train all layers
-                if k.split(".")[1] in Encoder_para_idx + Det_Head_para_idx:
-                    print('freezing %s' % k)
-                    v.requires_grad = False
-
-        if cfg.TRAIN.DET_ONLY:  #Only train detection branch
-            logger.info('freeze encoder and two Seg heads...')
-            # print(model.named_parameters)
-            for k, v in model.named_parameters():
-                v.requires_grad = True  # train all layers
-                if k.split(".")[1] in Encoder_para_idx + Da_Seg_Head_para_idx + Ll_Seg_Head_para_idx:
-                    print('freezing %s' % k)
-                    v.requires_grad = False
-
-        if cfg.TRAIN.ENC_SEG_ONLY:  # Only train encoder and two segmentation branchs
-            logger.info('freeze Det head...')
-            for k, v in model.named_parameters():
-                v.requires_grad = True  # train all layers 
-                if k.split(".")[1] in Det_Head_para_idx:
-                    print('freezing %s' % k)
-                    v.requires_grad = False
-
-        if cfg.TRAIN.ENC_DET_ONLY or cfg.TRAIN.DET_ONLY:    # Only train encoder and detection branchs
-            logger.info('freeze two Seg heads...')
-            for k, v in model.named_parameters():
-                v.requires_grad = True  # train all layers
-                if k.split(".")[1] in Da_Seg_Head_para_idx + Ll_Seg_Head_para_idx:
-                    print('freezing %s' % k)
-                    v.requires_grad = False
-
-
-        if cfg.TRAIN.LANE_ONLY: 
-            logger.info('freeze encoder and Det head and Da_Seg heads...')
-            # print(model.named_parameters)
-            for k, v in model.named_parameters():
-                v.requires_grad = True  # train all layers
-                if k.split(".")[1] in Encoder_para_idx + Da_Seg_Head_para_idx + Det_Head_para_idx:
-                    print('freezing %s' % k)
-                    v.requires_grad = False
-
-        if cfg.TRAIN.DRIVABLE_ONLY:
-            logger.info('freeze encoder and Det head and Ll_Seg heads...')
-            # print(model.named_parameters)
-            for k, v in model.named_parameters():
-                v.requires_grad = True  # train all layers
-                if k.split(".")[1] in Encoder_para_idx + Ll_Seg_Head_para_idx + Det_Head_para_idx:
-                    print('freezing %s' % k)
-                    v.requires_grad = False
         
     if rank == -1 and torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model, device_ids=cfg.GPUS)
@@ -300,16 +243,6 @@ def main():
             collate_fn=dataset.AutoDriveDataset.collate_fn
         )
         print('load data finished')
-    
-    if rank in [-1, 0]:
-        if cfg.NEED_AUTOANCHOR:
-            logger.info("begin check anchors")
-            run_anchor(logger,train_dataset, model=model, thr=cfg.TRAIN.ANCHOR_THRESHOLD, imgsz=min(cfg.MODEL.IMAGE_SIZE))
-        else:
-            logger.info("anchors loaded successfully")
-            det = model.module.model[model.module.detector_index] if is_parallel(model) \
-                else model.model[model.detector_index]
-            logger.info(str(det.anchors))
 
     # training
     num_warmup = max(round(cfg.TRAIN.WARMUP_EPOCHS * num_batch), 1000)
@@ -327,22 +260,18 @@ def main():
         # evaluate on validation set
         if (epoch % cfg.TRAIN.VAL_FREQ == 0 or epoch == cfg.TRAIN.END_EPOCH) and rank in [-1, 0]:
             # print('validate')
-            da_segment_results,ll_segment_results,detect_results, total_loss,maps, times = validate(
-                epoch,cfg, valid_loader, valid_dataset, model, criterion,
+            ll_segment_results, total_loss, maps, times = validate(
+                epoch, cfg, valid_loader, valid_dataset, model, criterion,
                 final_output_dir, tb_log_dir, writer_dict,
                 logger, device, rank
             )
-            fi = fitness(np.array(detect_results).reshape(1, -1))  #目标检测评价指标
 
             msg = 'Epoch: [{0}]    Loss({loss:.3f})\n' \
-                      'Driving area Segment: Acc({da_seg_acc:.3f})    IOU ({da_seg_iou:.3f})    mIOU({da_seg_miou:.3f})\n' \
-                      'Lane line Segment: Acc({ll_seg_acc:.3f})    IOU ({ll_seg_iou:.3f})  mIOU({ll_seg_miou:.3f})\n' \
-                      'Detect: P({p:.3f})  R({r:.3f})  mAP@0.5({map50:.3f})  mAP@0.5:0.95({map:.3f})\n'\
-                      'Time: inference({t_inf:.4f}s/frame)  nms({t_nms:.4f}s/frame)'.format(
-                          epoch,  loss=total_loss, da_seg_acc=da_segment_results[0],da_seg_iou=da_segment_results[1],da_seg_miou=da_segment_results[2],
-                          ll_seg_acc=ll_segment_results[0],ll_seg_iou=ll_segment_results[1],ll_seg_miou=ll_segment_results[2],
-                          p=detect_results[0],r=detect_results[1],map50=detect_results[2],map=detect_results[3],
-                          t_inf=times[0], t_nms=times[1])
+                  'Lane line Segment: Acc({ll_seg_acc:.3f})    IOU ({ll_seg_iou:.3f})  mIOU({ll_seg_miou:.3f})\n' \
+                  'Time: inference({t_inf:.4f}s/frame)  nms({t_nms:.4f}s/frame)'.format(
+                epoch, loss=total_loss,
+                ll_seg_acc=ll_segment_results[0], ll_seg_iou=ll_segment_results[1], ll_seg_miou=ll_segment_results[2],
+                t_inf=times[0], t_nms=times[1])
             logger.info(msg)
 
             # if perf_indicator >= best_perf:

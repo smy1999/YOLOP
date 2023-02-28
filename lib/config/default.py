@@ -4,7 +4,7 @@ from yacs.config import CfgNode as CN
 _C = CN()
 
 _C.LOG_DIR = 'runs/'
-_C.GPUS = (0, 1)
+_C.GPUS = (0,)
 _C.WORKERS = 0
 _C.PIN_MEMORY = False
 _C.PRINT_FREQ = 20
@@ -15,7 +15,7 @@ _C.num_seg_class = 2
 
 # Cudnn related params
 _C.CUDNN = CN()
-_C.CUDNN.BENCHMARK = True
+_C.CUDNN.BENCHMARK = False
 _C.CUDNN.DETERMINISTIC = False
 _C.CUDNN.ENABLED = False
 
@@ -46,10 +46,10 @@ _C.LOSS.LL_IOU_GAIN = 0.2  # lane line iou loss gain
 
 # DATASET related params
 _C.DATASET = CN(new_allowed=True)
-_C.DATASET.DATAROOT = './datasets/images'  # the path of images folder
-_C.DATASET.LABELROOT = './datasets/det_annotations'  # the path of det_annotations folder
-_C.DATASET.MASKROOT = './datasets/da_seg_annotations'  # the path of da_seg_annotations folder
-_C.DATASET.LANEROOT = './datasets/ll_seg_annotations'  # the path of ll_seg_annotations folder
+_C.DATASET.DATAROOT = './bdd/images'  # the path of images folder
+_C.DATASET.LABELROOT = './bdd/det_annotations'  # the path of det_annotations folder
+_C.DATASET.MASKROOT = './bdd/da_seg_annotations'  # the path of da_seg_annotations folder
+_C.DATASET.LANEROOT = './bdd/ll_seg_annotations'  # the path of ll_seg_annotations folder
 _C.DATASET.DATASET = 'BddDataset'
 _C.DATASET.TRAIN_SET = 'train'
 _C.DATASET.TEST_SET = 'val'
@@ -89,7 +89,7 @@ _C.TRAIN.BEGIN_EPOCH = 0
 _C.TRAIN.END_EPOCH = 240
 
 _C.TRAIN.VAL_FREQ = 1
-_C.TRAIN.BATCH_SIZE_PER_GPU = 24
+_C.TRAIN.BATCH_SIZE_PER_GPU = 3
 _C.TRAIN.SHUFFLE = True
 
 _C.TRAIN.IOU_THRESHOLD = 0.2

@@ -66,77 +66,34 @@ class MultiHeadLoss(nn.Module):
         """
         cfg = self.cfg
         device = targets[0].device
-        lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
-
-        # Class label smoothing https://arxiv.org/pdf/1902.04103.pdf eqn 3
-        cp, cn = smooth_BCE(eps=0.0)
-
         BCEcls, BCEobj, BCEseg = self.losses
 
-        # Calculate Losses
-        nt = 0  # number of targets
-        no = len(predictions[0])  # number of outputs
-        balance = [4.0, 1.0, 0.4] if no == 3 else [4.0, 1.0, 0.4, 0.1]  # P3-5 or P3-6
-
-        drive_area_seg_predicts = predictions[0].view(-1)
-        drive_area_seg_targets = targets[1].view(-1)
-        lseg_da = BCEseg(drive_area_seg_predicts, drive_area_seg_targets)
-
-        lane_line_seg_predicts = predictions[1].view(-1)
-        lane_line_seg_targets = targets[2].view(-1)
+        lane_line_seg_predicts = predictions[0].view(-1)
+        lane_line_seg_targets = targets[0].view(-1)
         lseg_ll = BCEseg(lane_line_seg_predicts, lane_line_seg_targets)
 
         metric = SegmentationMetric(2)
-        nb, _, height, width = targets[1].shape
+        nb, _, height, width = targets[0].shape
         pad_w, pad_h = shapes[0][1][1]
         pad_w = int(pad_w)
         pad_h = int(pad_h)
-        _,lane_line_pred=torch.max(predictions[1], 1)
-        _,lane_line_gt=torch.max(targets[2], 1)
-        lane_line_pred = lane_line_pred[:, pad_h:height-pad_h, pad_w:width-pad_w]
-        lane_line_gt = lane_line_gt[:, pad_h:height-pad_h, pad_w:width-pad_w]
+        _, lane_line_pred = torch.max(predictions[0], 1)
+        _, lane_line_gt = torch.max(targets[0], 1)
+        lane_line_pred = lane_line_pred[:, pad_h:height - pad_h, pad_w:width - pad_w]
+        lane_line_gt = lane_line_gt[:, pad_h:height - pad_h, pad_w:width - pad_w]
         metric.reset()
         metric.addBatch(lane_line_pred.cpu(), lane_line_gt.cpu())
         IoU = metric.IntersectionOverUnion()
         liou_ll = 1 - IoU
 
-        s = 3 / no  # output count scaling
-        lcls *= cfg.LOSS.CLS_GAIN * s * self.lambdas[0]
-        lobj *= cfg.LOSS.OBJ_GAIN * s * (1.4 if no == 4 else 1.) * self.lambdas[1]
-        lbox *= cfg.LOSS.BOX_GAIN * s * self.lambdas[2]
-
-        lseg_da *= cfg.LOSS.DA_SEG_GAIN * self.lambdas[3]
         lseg_ll *= cfg.LOSS.LL_SEG_GAIN * self.lambdas[4]
         liou_ll *= cfg.LOSS.LL_IOU_GAIN * self.lambdas[5]
-
-        
-        if cfg.TRAIN.DET_ONLY or cfg.TRAIN.ENC_DET_ONLY or cfg.TRAIN.DET_ONLY:
-            lseg_da = 0 * lseg_da
-            lseg_ll = 0 * lseg_ll
-            liou_ll = 0 * liou_ll
-            
-        if cfg.TRAIN.SEG_ONLY or cfg.TRAIN.ENC_SEG_ONLY:
-            lcls = 0 * lcls
-            lobj = 0 * lobj
-            lbox = 0 * lbox
-
-        if cfg.TRAIN.LANE_ONLY:
-            lcls = 0 * lcls
-            lobj = 0 * lobj
-            lbox = 0 * lbox
-            lseg_da = 0 * lseg_da
-
-        if cfg.TRAIN.DRIVABLE_ONLY:
-            lcls = 0 * lcls
-            lobj = 0 * lobj
-            lbox = 0 * lbox
-            lseg_ll = 0 * lseg_ll
-            liou_ll = 0 * liou_ll
+        lcls, lbox, lobj, lseg_da = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
 
         loss = lbox + lobj + lcls + lseg_da + lseg_ll + liou_ll
-        # loss = lseg
-        # return loss * bs, torch.cat((lbox, lobj, lcls, loss)).detach()
+
         return loss, (lbox.item(), lobj.item(), lcls.item(), lseg_da.item(), lseg_ll.item(), liou_ll.item(), loss.item())
+
 
 
 def get_loss(cfg, device):

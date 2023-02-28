@@ -28,39 +28,11 @@ class BddDataset(AutoDriveDataset):
         """
         print('building database...')
         gt_db = []
-        height, width = self.shapes
-        for mask in tqdm(list(self.mask_list)):
-            mask_path = str(mask)
-            label_path = mask_path.replace(str(self.mask_root), str(self.label_root)).replace(".png", ".json")
-            image_path = mask_path.replace(str(self.mask_root), str(self.img_root)).replace(".png", ".jpg")
-            lane_path = mask_path.replace(str(self.mask_root), str(self.lane_root))
-            with open(label_path, 'r') as f:
-                label = json.load(f)
-            data = label['frames'][0]['objects']
-            data = self.filter_data(data)
-            gt = np.zeros((len(data), 5))
-            for idx, obj in enumerate(data):
-                category = obj['category']
-                if category == "traffic light":
-                    color = obj['attributes']['trafficLightColor']
-                    category = "tl_" + color
-                if category in id_dict.keys():
-                    x1 = float(obj['box2d']['x1'])
-                    y1 = float(obj['box2d']['y1'])
-                    x2 = float(obj['box2d']['x2'])
-                    y2 = float(obj['box2d']['y2'])
-                    cls_id = id_dict[category]
-                    if single_cls:
-                         cls_id=0
-                    gt[idx][0] = cls_id
-                    box = convert((width, height), (x1, x2, y1, y2))
-                    gt[idx][1:] = list(box)
-                
-
+        for lane in tqdm(list(self.lane_list)):
+            lane_path = str(lane)
+            image_path = lane_path.replace(str(self.lane_root), str(self.img_root)).replace(".png", ".jpg")
             rec = [{
                 'image': image_path,
-                'label': gt,
-                'mask': mask_path,
                 'lane': lane_path
             }]
 
